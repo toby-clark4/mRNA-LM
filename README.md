@@ -1,5 +1,5 @@
 ## Pre-trained models
-The CodonBERT Pytorch model can be downloaded [here](https://cdn.prod.accelerator.sanofi/llm/CodonBERT.zip). The artifact is under a [license](ARTIFACT_LICENSE.md).
+The pre-trained models are available for download here: [CodonBERT](https://cdn.prod.accelerator.sanofi/llm/CodonBERT.zip), [5UTRBERT](https://cdn.prod.accelerator.sanofi/llm/mrna_5utr_model.zip), and [3UTRBERT](https://cdn.prod.accelerator.sanofi/llm/mrna_3utr_model.zip). The artifact is under a [license](ARTIFACT_LICENSE.md).
 The code and repository are under a [software license](SOFTWARE_LICENSE.md).
 
 ## Finetune the mRNA-LM model 
