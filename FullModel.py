@@ -10,26 +10,41 @@ from tokenizers.pre_tokenizers import *
 from tokenizers.processors import BertProcessing
 
 from transformers import BertForMaskedLM, PreTrainedTokenizerFast
+from cdslm.modeling_modernbert import ModernBertForMaskedLM
 
 ########### PEFT
 from peft import LoraConfig, TaskType
 from peft import get_peft_model
 
 class FullModel(torch.nn.Module):
-    def __init__(self, num_labels, class_weights, lorar, lalpha, ldropout, head_dim=768, head_droupout=0.5, useCLIP=False, temperature=0.07, clip_coeff=0.2):
+    def __init__(self, num_labels, class_weights, lorar, lalpha, ldropout, head_dim=768, head_droupout=0.5, useCLIP=False, temperature=0.07, clip_coeff=0.2, cdslm=False, splice=False):
         super(FullModel, self).__init__()
-        
+
+        self.cdslm = cdslm
         # tokenizer
         self.tokenizer_cds = None
         self.tokenizer_5utr = None
         self.tokenizer_3utr = None
+        self.splice = splice
         self.build_tokenizer()
         self.CLIP = useCLIP
+       
         
         # model 
-        self.utr5 = BertForMaskedLM.from_pretrained("/mount/data/models/mrna_5utr_model")
-        self.utr3 = BertForMaskedLM.from_pretrained("/mount/data/models/mrna_3utr_model")
-        self.cds = BertForMaskedLM.from_pretrained("/mount/data/models/CodonBERT")
+        self.utr5 = BertForMaskedLM.from_pretrained("/home/jovyan/workspace/mRNA-LM/models/mrna_5utr_model")
+        self.utr3 = BertForMaskedLM.from_pretrained("/home/jovyan/workspace/mRNA-LM/models/mrna_3utr_model")
+        if cdslm:
+            if splice:
+                self.cds = ModernBertForMaskedLM.from_pretrained("/home/jovyan/shared/toby/cds-lm/assets/saved_models/modern-BERT/modern-BERT-large-eukaryotes-sss")
+            else:
+                self.cds = ModernBertForMaskedLM.from_pretrained("/home/jovyan/shared/toby/cds-lm/assets/saved_models/modern-BERT/modern-BERT-large-eukaryotes")
+        else:
+            self.cds = BertForMaskedLM.from_pretrained("/home/jovyan/workspace/mRNA-LM/models/codonbert")
+
+        if splice:
+            print("resizing token embeddings")
+            self.utr5.resize_token_embeddings(len(self.tokenizer_5utr))
+            self.utr3.resize_token_embeddings(len(self.tokenizer_3utr))
         
         # gradient_checkpointing_enable: trading speed for memory
         # self.utr5.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -43,6 +58,12 @@ class FullModel(torch.nn.Module):
                                     lora_alpha=lalpha, 
                                     lora_dropout=ldropout,
                                     use_rslora=True)
+            cdslm_peft_config = LoraConfig(task_type=TaskType.TOKEN_CLS,
+                                    r=lorar, 
+                                    lora_alpha=lalpha, 
+                                    lora_dropout=ldropout,
+                                    target_modules=["Wqkv", "Wo"],
+                                    use_rslora=True)
 
             self.utr5 = get_peft_model(self.utr5, peft_config)
             self.utr5.print_trainable_parameters()
@@ -54,7 +75,7 @@ class FullModel(torch.nn.Module):
             # self.utr3.gradient_checkpointing_enable()
             # self.utr3.enable_input_require_grads()
 
-            self.cds = get_peft_model(self.cds, peft_config)
+            self.cds = get_peft_model(self.cds, cdslm_peft_config) if cdslm else get_peft_model(self.cds, peft_config)
             self.cds.print_trainable_parameters()
             # self.cds.gradient_checkpointing_enable()
             # self.cds.enable_input_require_grads()
@@ -62,11 +83,13 @@ class FullModel(torch.nn.Module):
 
         # Dense layers for CLIP-style structure
         self.dense_utr5 = nn.Linear(768, 768)
-        self.dense_cds1 = nn.Linear(768, 768)
-        self.dense_cds2 = nn.Linear(768, 768)
+        self.dense_cds1 = nn.Linear(self.cds.config.hidden_size, 768)
+        self.dense_cds2 = nn.Linear(self.cds.config.hidden_size, 768)
         self.dense_utr3 = nn.Linear(768, 768)
-
-        self.final_dense = nn.Linear(768*3, head_dim)
+        if self.CLIP:
+            self.final_dense = nn.Linear(768*3, head_dim)
+        else:
+            self.final_dense = nn.Linear(768*2 + self.cds.config.hidden_size, head_dim)
 
         self.transform_act_fn = gelu
         self.LayerNorm = torch.nn.LayerNorm(head_dim, eps=1e-12)
@@ -219,7 +242,7 @@ class FullModel(torch.nn.Module):
     
 
     def build_tokenizer(self):
-        lst_ele = list('AUGCN')
+        lst_ele = list('AUGC')
         lst_voc = ['[PAD]', '[UNK]', '[CLS]', '[SEP]', '[MASK]']
         for a1 in lst_ele:
             for a2 in lst_ele:
@@ -238,6 +261,8 @@ class FullModel(torch.nn.Module):
         for a1 in lst_ele:
             lst_voc.extend([f'{a1}'])
         dic_voc = dict(zip(lst_voc, range(len(lst_voc))))
+        if self.splice:
+            dic_voc['S'] = len(lst_voc)
         tokenizer_5utr = Tokenizer(WordLevel(vocab=dic_voc, unk_token="[UNK]"))
         tokenizer_5utr.add_special_tokens(['[PAD]','[CLS]', '[UNK]', '[SEP]','[MASK]'])
         tokenizer_5utr.pre_tokenizer = Whitespace()
@@ -247,12 +272,16 @@ class FullModel(torch.nn.Module):
         )
         tokenizer_3utr = tokenizer_5utr
 
-        self.tokenizer_cds = PreTrainedTokenizerFast(tokenizer_object=tokenizer_cds, 
-                                                     unk_token='[UNK]',
-                                                     sep_token='[SEP]',
-                                                     pad_token='[PAD]',
-                                                     cls_token='[CLS]',
-                                                     mask_token='[MASK]')
+        if self.cdslm:
+            self.tokenizer_cds = PreTrainedTokenizerFast.from_pretrained('../CDS-LM/tokenizer/codon_tokenizer_sss')
+        else:
+            self.tokenizer_cds = PreTrainedTokenizerFast(tokenizer_object=tokenizer_cds, 
+                                                         unk_token='[UNK]',
+                                                         sep_token='[SEP]',
+                                                         pad_token='[PAD]',
+                                                         cls_token='[CLS]',
+                                                         mask_token='[MASK]')
+        
         self.tokenizer_5utr = PreTrainedTokenizerFast(tokenizer_object=tokenizer_5utr, 
                                                       unk_token='[UNK]',
                                                       sep_token='[SEP]',

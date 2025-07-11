@@ -1,8 +1,8 @@
 import pandas as pd
 from datasets import Dataset
 
-def mytok(seq, kmer_len, s):
-    seq = seq.upper().replace("T", "U")    
+def mytok(seq, kmer_len, s, U=True):
+    seq = seq.upper().replace("T", "U") if U else seq    
     kmer_list = []
     for j in range(0, (len(seq)-kmer_len)+1, s):
         kmer_list.append(seq[j:j+kmer_len])
@@ -104,30 +104,48 @@ def build_liver_dataset():
 
     return ds_train, ds_valid, ds_test
 
-def build_saluki_dataset(cross):
-    def load_dataset(data_path):
+def build_saluki_dataset(cross, map_to_U=True, splice=False):
+    valid_test_folds = [cross+1, cross] if cross != 9 else [0, 9]
+    def load_dataset(data_path, split):            
         df = pd.read_csv(data_path)
+        if split == "train":
+            df = df[[split not in valid_test_folds for split in df["split"]]]
+        elif split == "valid":
+            df = df[df["split"] == valid_test_folds[0]]
+        else: # test
+            df = df[df["split"] == valid_test_folds[1]]
         df = df.fillna('')
         df = df.dropna(subset=["y"])
+
+        if not splice:
+            utr5 = df["UTR5"].values.tolist()
+            utr3 = df["UTR3"].values.tolist()
+            cds = df["CDS"].values.tolist()
+        else:
+            utr5 = df["SplicedUTR5"].values.tolist()
+            utr3 = df["SplicedUTR3"].values.tolist()
+            cds = df["SplicedCDS"].values.tolist()
             
-        utr5 = df["UTR5"].values.tolist()
-        utr3 = df["UTR3"].values.tolist()
-        cds = df["CDS"].values.tolist()
         ys = df["y"].values.tolist()
         
         utr5 = [" ".join(mytok(seq, 1, 1)) for seq in utr5]
-        cds  = [" ".join(mytok(seq, 3, 3)) for seq in cds]
+        cds  = [" ".join(mytok(seq, 3, 3, map_to_U)) for seq in cds]
         utr3 = [" ".join(mytok(seq, 1, 1)) for seq in utr3]
         seqs = list(zip(utr5, cds, utr3))
         
         assert len(seqs) == len(ys)
         
         return seqs, ys
-
+    """
     train_seqs, train_ys = load_dataset("data/mrna_half-life.csv", "train")
     valid_seqs, valid_ys = load_dataset("data/mrna_half-life.csv", "valid")
     test_seqs, test_ys   = load_dataset("data/mrna_half-life.csv", "test")
-
+    """
+    train_seqs, train_ys = load_dataset("../CDS-LM/data/finetuning/saluki/human_sss_reprocessed.csv", "train")
+    valid_seqs, valid_ys = load_dataset("../CDS-LM/data/finetuning/saluki/human_sss_reprocessed.csv", "valid")
+    test_seqs, test_ys   = load_dataset("../CDS-LM/data/finetuning/saluki/human_sss_reprocessed.csv", "test")
+    
+    
     ds_train = Dataset.from_list([{"5utr": seq[0], "cds": seq[1], "3utr": seq[2], "label": y} for seq, y in zip(train_seqs, train_ys)])
     ds_valid = Dataset.from_list([{"5utr": seq[0], "cds": seq[1], "3utr": seq[2], "label": y} for seq, y in zip(valid_seqs, valid_ys)])
     ds_test  = Dataset.from_list([{"5utr": seq[0], "cds": seq[1], "3utr": seq[2], "label": y} for seq, y in zip(test_seqs, test_ys)])

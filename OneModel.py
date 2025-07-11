@@ -7,7 +7,7 @@ from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import *
 from tokenizers.processors import BertProcessing
 
-from transformers import BertForSequenceClassification, PreTrainedTokenizerFast
+from transformers import BertForSequenceClassification, PreTrainedTokenizerFast, BertForMaskedLM
 
 ########### PEFT
 from peft import LoraConfig, TaskType
@@ -28,16 +28,17 @@ class OneModel(torch.nn.Module):
         
         # model 
         if self.region == "5utr":
-            model_dir = "/mount/data/models/mrna_5utr_model"
+            model_dir = "/home/jovyan/workspace/mRNA-LM/models/mrna_5utr_model"
         elif self.region == "3utr":
-            model_dir = "/mount/data/models/mrna_3utr_model"
+            model_dir = "/home/jovyan/workspace/mRNA-LM/models/mrna_3utr_model"
         elif self.region == "cds":
-            model_dir = "/mount/data/models/CodonBERT"
+            model_dir = "/home/jovyan/workspace/mRNA-LM/models/codonbert"
         else:
             print("wrong region!!", self.region)
             exit(0)
         
-        self.model = BertForSequenceClassification.from_pretrained(model_dir, num_labels=num_labels, output_hidden_states=output_hidden_states)
+        # self.model = BertForSequenceClassification.from_pretrained(model_dir, num_labels=num_labels, output_hidden_states=output_hidden_states)
+        self.model = BertForMaskedLM.from_pretrained(model_dir, num_labels=num_labels, output_hidden_states=output_hidden_states)
 #         self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
         ########### lora
@@ -54,7 +55,7 @@ class OneModel(torch.nn.Module):
 #             self.model.enable_input_require_grads()
     
     def build_tokenizer(self):
-        lst_ele = list('AUGCN')
+        lst_ele = list('AUGC')# list('AUGCN')
         lst_voc = ['[PAD]', '[UNK]', '[CLS]', '[SEP]', '[MASK]']
         if self.region == "cds":
             for a1 in lst_ele:
