@@ -122,8 +122,8 @@ def build_saluki_dataset(cross, map_to_U=True, splice=False):
             utr3 = df["UTR3"].values.tolist()
             cds = df["CDS"].values.tolist()
         else:
-            utr5 = df["SplicedUTR5"].values.tolist()
-            utr3 = df["SplicedUTR3"].values.tolist()
+            utr5 = df["UTR5"].values.tolist()
+            utr3 = df["UTR3"].values.tolist()
             cds = df["SplicedCDS"].values.tolist()
             
         ys = df["y"].values.tolist()

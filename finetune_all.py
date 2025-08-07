@@ -35,11 +35,14 @@ parser.add_argument('--temperature',  '-temp', type=float, default=0.07, help='t
 parser.add_argument('--coefficient',  '-coeff', type=float, default=0.2, help='coefficient')
 
 parser.add_argument('--splice', '-s', type=bool, default=False, help='use splice sites')
+parser.add_argument('--usecdslm', '-cdslm', type=bool, default=False, help = 'use CDS-LM')
 
 args = parser.parse_args()
 
 ########### GPU
 os.environ["CUDA_VISIBLE_DEVICES"] = "%d" % args.device
+
+print(args)
 
 ######### Task
 if args.task not in ["tr", "halflife", "5class", "liver"]:
@@ -66,13 +69,14 @@ for i in range(10):
     model = FullModel(num_labels, class_weights, 
                       args.lorar, args.lalpha, args.ldropout, 
                       args.head_dim, args.head_dropout,
-                      args.useCLIP, args.temperature, args.coefficient, cdslm=True, splice=args.splice)
+                      args.useCLIP, args.temperature, args.coefficient, cdslm=args.usecdslm, splice=args.splice)
     
     ########### loading dataset and dataloader
     if args.task == "tr":
         ds_train, ds_valid, ds_test = build_dp_dataset()
     elif args.task == "halflife":
-        ds_train, ds_valid, ds_test = build_saluki_dataset(i, False, args.splice)
+        map_to_u = not args.usecdslm
+        ds_train, ds_valid, ds_test = build_saluki_dataset(i, map_to_u, args.splice)
     elif args.task == "5class":
         ds_train, ds_valid, ds_test = build_class_dataset()
     elif args.task == "liver":
@@ -97,8 +101,8 @@ for i in range(10):
         save_strategy="epoch", 
         save_steps=1,                              # save model 
         load_best_model_at_end=True,               # whether to load the best model (in terms of loss) at the end of training
-    #     metric_for_best_model=metric_for_best_model, 
-    #     greater_is_better=greater_is_better,
+        metric_for_best_model=metric_for_best_model, 
+        greater_is_better=greater_is_better,
         save_total_limit = 1,
         eval_steps=1,      
         logging_steps=100,
@@ -141,11 +145,12 @@ for i in range(10):
         train_dataset=train_loader,
         eval_dataset=val_loader,
         compute_metrics=compute_metrics,
-        callbacks=[early_stopping],
+        # callbacks=[early_stopping],
     )
     
     ######### Training & Evaluation & Prediction
     # Train the model
+    
     trainer.train() # resume_from_checkpoint=True
     """
     checkpoint = torch.load("/home/jovyan/shared/toby/cds-lm/mRNA-LM/checkpoint-2106/pytorch_model.bin", weights_only=True)
@@ -165,5 +170,6 @@ for i in range(10):
 
 res_df = pd.concat(df_list, ignore_index=True)
 print(res_df['test_spearmanr'].mean())
-res_df.to_csv('./CDS-LM-X-test_res.csv')
-pd.DataFrame({'pred': preds_list, 'y_true': true_list}).to_csv('./CDS-LM-X-test_preds.csv')
+os.makedirs(args.output, exist_ok=True)
+res_df.to_csv(f'{args.output}/test_res.csv')
+pd.DataFrame({'pred': preds_list, 'y_true': true_list}).to_csv(f'{args.output}/test_preds.csv')

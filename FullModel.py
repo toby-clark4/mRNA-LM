@@ -40,12 +40,12 @@ class FullModel(torch.nn.Module):
                 self.cds = ModernBertForMaskedLM.from_pretrained("/home/jovyan/shared/toby/cds-lm/assets/saved_models/modern-BERT/modern-BERT-large-eukaryotes")
         else:
             self.cds = BertForMaskedLM.from_pretrained("/home/jovyan/workspace/mRNA-LM/models/codonbert")
-
-        if splice:
+        """
+        if self.utr5.config.vocab_size != len(self.tokenizer_5utr.vocab):
             print("resizing token embeddings")
             self.utr5.resize_token_embeddings(len(self.tokenizer_5utr))
             self.utr3.resize_token_embeddings(len(self.tokenizer_3utr))
-        
+        """
         # gradient_checkpointing_enable: trading speed for memory
         # self.utr5.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
         # self.utr3.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -261,8 +261,10 @@ class FullModel(torch.nn.Module):
         for a1 in lst_ele:
             lst_voc.extend([f'{a1}'])
         dic_voc = dict(zip(lst_voc, range(len(lst_voc))))
+        """
         if self.splice:
             dic_voc['S'] = len(lst_voc)
+        """
         tokenizer_5utr = Tokenizer(WordLevel(vocab=dic_voc, unk_token="[UNK]"))
         tokenizer_5utr.add_special_tokens(['[PAD]','[CLS]', '[UNK]', '[SEP]','[MASK]'])
         tokenizer_5utr.pre_tokenizer = Whitespace()
@@ -303,7 +305,7 @@ class FullModel(torch.nn.Module):
         tok_cds = self.tokenizer_cds(data['cds'], 
                                     truncation=True,  # do_not_truncate
                                     padding="max_length",
-                                    max_length=1024)
+                                    max_length=self.cds.config.max_position_embeddings)
         tok_3utr = self.tokenizer_3utr(data['3utr'], 
                                       truncation=True,  # do_not_truncate
                                       padding="max_length",

@@ -180,6 +180,7 @@ def run_benchmarks(
 
     pred_list = []
     # Melting point
+    """
     data_path = f"{data_dir}/melting_temperature/melting_temperature.csv"
     meltome_res, preds = benchmark_task(
         model,
@@ -235,7 +236,7 @@ def run_benchmarks(
         pred_list.append(preds)
     pd.concat(res_list).to_csv(f"{res_dir}/transcript_abundance.csv")
 
-    """
+    
     # Protein abundance
     spec_list = [
         "athaliana",
@@ -267,7 +268,7 @@ def run_benchmarks(
         spec_res["species"] = species
         res_list.append(spec_res)
     pd.concat(res_list).to_csv(f"{res_dir}/protein_abundance.csv")
-    """
+    
     cell_lines = {
         'human': ['hlf', 'htert1'],
         'yeast': ['glucose', 'ethanol'],
@@ -360,6 +361,27 @@ def run_benchmarks(
         predefined_split=True,
     )
     translation_rate_res.to_csv(f'{res_dir}/translation_rate.csv')
+    pred_list.append(preds)
+    """
+    data_path = f"{data_dir}/icodon/icodon_zebrafish.csv"
+    translation_rate_res, preds = benchmark_task(
+        model,
+        tokenizer,
+        data_path,
+        "icodon_zebrafish",
+        "CDS",
+        "y",
+        emb_option,
+        emb_layer,
+        embs_dir,
+        n_splits,
+        random_state,
+        elastic_alpha,
+        emb_batch_size,
+        max_length,
+        predefined_split=True,
+    )
+    translation_rate_res.to_csv(f'{res_dir}/icodon_zebrafish.csv')
     pred_list.append(preds)
 
     if save_preds:
