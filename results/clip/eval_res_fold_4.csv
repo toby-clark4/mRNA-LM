@@ -1,0 +1,2 @@
+,eval_loss,eval_pearson,eval_spearmanr,eval_runtime,eval_samples_per_second,eval_steps_per_second,epoch
+0,0.6865611672401428,0.763565719127655,0.755102734147414,24.0961,53.453,1.702,19.0
